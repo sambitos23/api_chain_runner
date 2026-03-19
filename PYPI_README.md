@@ -1,0 +1,229 @@
+# API Chain Runner
+
+A Python CLI tool for executing chained API calls defined in YAML. Each step can reference responses from previous steps, generate unique test data, upload files, poll for expected values, and add delays between steps — all logged to CSV or Excel.
+
+## Installation
+
+```bash
+pip install api-chain-runner
+```
+
+## Quick Start
+
+1. Create a YAML config file (e.g. `my_chain.yaml`):
+
+```yaml
+chain:
+  - name: auth
+    url: "https://api.example.com/login"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+    payload:
+      email: "${ENV:AUTH_EMAIL}"
+      password: "${ENV:AUTH_PASSWORD}"
+
+  - name: get_user
+    url: "https://api.example.com/user/${auth.userId}"
+    method: GET
+    headers:
+      Authorization: "Bearer ${auth.token}"
+```
+
+2. Run it:
+
+```bash
+api-chain-runner my_chain.yaml
+```
+
+That's it. Results are saved to `my_chain_results.csv` by default.
+
+## CLI Usage
+
+```bash
+# Basic run
+api-chain-runner my_chain.yaml
+
+# Custom output path
+api-chain-runner my_chain.yaml -o output/results.csv
+
+# Excel output
+api-chain-runner my_chain.yaml -o results.xlsx -f xlsx
+
+# Check version
+api-chain-runner --version
+```
+
+## Programmatic Usage
+
+You can also use it as a Python library:
+
+```python
+from api_chain_runner import ChainRunner, ChainResult
+
+runner = ChainRunner("my_chain.yaml")
+result: ChainResult = runner.run()
+
+print(f"{result.passed}/{result.total_steps} steps passed")
+for step in result.results:
+    print(f"  {step.step_name}: HTTP {step.status_code}")
+```
+
+## Features
+
+### Cross-Step References
+
+Use `${step_name.key.path}` to pass data between steps:
+
+```yaml
+Authorization: "Bearer ${auth.idToken}"
+url: "https://api.example.com/status?id=${create_lead.leadId}"
+```
+
+### Environment Variables
+
+Keep secrets out of your YAML with `${ENV:VAR_NAME}`:
+
+```yaml
+url: "https://api.example.com/auth?key=${ENV:API_KEY}"
+```
+
+### Variables
+
+Define reusable values at the top of your config:
+
+```yaml
+variables:
+  base_url: "https://api.example.com"
+  token: "static-token-value"
+
+chain:
+  - name: get_data
+    url: "${vars.base_url}/data"
+    method: GET
+    headers:
+      Authorization: "Bearer ${vars.token}"
+```
+
+### Unique Data Generation
+
+Auto-generate unique emails, PAN numbers, and mobile numbers per run:
+
+```yaml
+payload:
+  email: "placeholder"
+  pan: "placeholder"
+  mobile: "placeholder"
+unique_fields:
+  email: email
+  pan: pan
+  mobile: mobile
+```
+
+### Polling
+
+Wait for async operations to complete:
+
+```yaml
+polling:
+  key_path: "status"
+  expected_values: ["APPROVED", "COMPLETED"]
+  interval: 10
+  max_timeout: 120
+```
+
+### Delays
+
+Add wait time between steps:
+
+```yaml
+- name: check-status
+  url: "https://api.example.com/status"
+  method: GET
+  delay: 20
+```
+
+### File Uploads
+
+Upload files as multipart/form-data:
+
+```yaml
+files:
+  document: "path/to/file.pdf"
+```
+
+### Conditional Steps
+
+Skip steps based on previous responses:
+
+```yaml
+condition:
+  step: check-status
+  key_path: "status"
+  expected_value: "PENDING"
+```
+
+### Manual Steps
+
+Pause the chain for manual actions (e.g. filling a form in a browser):
+
+```yaml
+- name: complete-registration
+  manual: true
+  instruction: "Open the link above, fill the form, then press Enter here"
+```
+
+### Pause / Resume
+
+Press `p` to pause between steps, `r` or `Enter` to resume, `Ctrl+C` to abort.
+
+## Step Fields Reference
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Unique step identifier |
+| `url` | Yes | Request URL (supports `${step.key}` references) |
+| `method` | Yes | HTTP method (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`) |
+| `headers` | No | Request headers |
+| `payload` | No | JSON request body |
+| `files` | No | File uploads (`field: path`) |
+| `unique_fields` | No | Auto-generate unique values (`path: type`) |
+| `polling` | No | Retry until response matches expected value |
+| `delay` | No | Seconds to wait before this step |
+| `print_keys` | No | Response keys to print to console |
+| `manual` | No | Manual checkpoint step |
+| `instruction` | No | Instructions for manual steps |
+| `condition` | No | Conditional execution |
+| `continue_on_error` | No | Stop chain on failure if `false` |
+
+## Output
+
+Results are logged to CSV or Excel with timestamps, including full request/response details for each step.
+
+```
+============================================================
+  Running chain: my_chain (3 steps)
+============================================================
+
+[1/3] ▶ auth (POST https://api.example.com/login)
+         ✅ Passed — HTTP 200 (342ms)
+[2/3] ▶ create-lead (POST https://api.example.com/lead)
+         ✅ Passed — HTTP 200 (1205ms)
+[3/3] ▶ check-status (GET https://api.example.com/status)
+         ✅ Passed — HTTP 200 (89ms)
+
+============================================================
+  Done: 3 passed, 0 failed out of 3 steps
+  Results saved to: my_chain_results.csv
+============================================================
+```
+
+## Requirements
+
+- Python 3.10+
+
+All dependencies (`requests`, `pyyaml`, `openpyxl`) are installed automatically.
+
+## License
+
+MIT

@@ -6,11 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "api-chain-runner"
 dynamic = ["version"]
 description = "Execute chained API calls defined in YAML configuration files"
-readme = "README.md"
+readme = "PYPI_README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Sambit Saha", email = "creativesambit@gmail.com"},
 ]
 keywords = ["api", "chain", "runner", "yaml", "testing", "automation"]
 classifiers = [
@@ -30,9 +30,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/api-chain-runner"
-Repository = "https://github.com/your-username/api-chain-runner"
-Issues = "https://github.com/your-username/api-chain-runner/issues"
+Homepage = "https://github.com/sambitos23/api_chain_runner"
+Repository = "https://github.com/sambitos23/api_chain_runner"
+Issues = "https://github.com/sambitos23/api_chain_runner/issues"
 
 [project.optional-dependencies]
 test = ["hypothesis", "pytest"]

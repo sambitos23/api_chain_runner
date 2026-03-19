@@ -1,6 +1,6 @@
 """API Chain Runner — execute chained API calls with dynamic reference resolution."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.4"
 
 from api_chain_runner.runner import ChainRunner
 from api_chain_runner.models import (
