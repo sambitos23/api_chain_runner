@@ -161,9 +161,67 @@ payload:
   mobile: "placeholder"
 unique_fields:
   email: email        # generates: user_1718901234_a1b2c3@test.com
-  pan: pan            # generates: valid Indian PAN format
+  pan: pan            # generates: valid Indian PAN format (random entity type)
   mobile: mobile      # generates: 10-digit Indian mobile number
 ```
+
+You can control the PAN entity type (the 4th character) using a suffix:
+
+| Generator Type | 4th Character | Entity Type |
+|---------------|---------------|-------------|
+| `pan` | Random from `PCHFAT` | Any |
+| `pan-p` | `P` | Individual |
+| `pan-c` | `C` | Company |
+| `pan-h` | `H` | HUF |
+| `pan-f` | `F` | Firm |
+| `pan-a` | `A` | AOP |
+| `pan-t` | `T` | Trust |
+
+Example:
+
+```yaml
+unique_fields:
+  pan: pan-p      # always generates Individual PAN (4th char = P)
+  pan: pan-c      # always generates Company PAN (4th char = C)
+  pan: pan        # random entity type
+```
+
+### Custom Generators (Plugin System)
+
+If you're using `api-chain-runner` as a library, you can register your own generator functions. Once registered, they work in YAML `unique_fields` just like the built-in ones.
+
+```python
+import random
+from api_chain_runner import ChainRunner
+
+runner = ChainRunner("my_chain.yaml")
+
+# Register custom generators
+runner.generator.register_generator(
+    "name", lambda: random.choice(["Alice", "Bob", "Charlie"])
+)
+runner.generator.register_generator(
+    "city", lambda: random.choice(["Mumbai", "Delhi", "Bangalore"])
+)
+
+result = runner.run()
+```
+
+Then in your YAML:
+
+```yaml
+payload:
+  customer_name: "placeholder"
+  city: "placeholder"
+unique_fields:
+  customer_name: name
+  city: city
+```
+
+Rules:
+- The function must take no arguments and return a string.
+- You cannot override built-in generators (`email`, `pan`, `mobile`, `udyam`).
+- If an unknown generator type is used in YAML without being registered, the runner raises a clear error.
 
 ### File Uploads
 
@@ -352,7 +410,7 @@ YAML Config → ChainRunner (orchestrator)
 | `executor.py` | `StepExecutor` — resolves references, generates data, executes HTTP calls, handles polling with negative index support |
 | `resolver.py` | `ReferenceResolver` — replaces `${step.key.path}` with stored response values |
 | `store.py` | `ResponseStore` — in-memory key-value store for cross-step data sharing |
-| `generator.py` | `UniqueDataGenerator` — creates unique email, PAN, and mobile values |
+| `generator.py` | `UniqueDataGenerator` — creates unique email, PAN, mobile values; supports custom generators via `register_generator()` |
 | `logger.py` | `ResultLogger` — logs all requests/responses to CSV or Excel with IST timestamps |
 | `models.py` | Data classes (`StepDefinition`, `StepResult`, `ChainResult`, etc.) and validation |
 

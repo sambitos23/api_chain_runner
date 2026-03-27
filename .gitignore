@@ -34,13 +34,7 @@ results.csv
 results.xlsx
 
 # Sensitive YAML configs (contain API keys/tokens)
-bharatpe.yaml
-mobikwik.yaml
-paytm.yaml
-phonepe.yaml
-phonepe_counter_offer.yaml
-phonepe_udyam_reg.yaml
-spice_money.yaml
+flow
 
 # Sensitive documents
 doc_file/

@@ -120,6 +120,50 @@ unique_fields:
   mobile: mobile
 ```
 
+You can control the PAN entity type (the 4th character) using a suffix:
+
+| Generator Type | 4th Character | Entity Type |
+|---------------|---------------|-------------|
+| `pan` | Random | Any |
+| `pan-p` | `P` | Individual |
+| `pan-c` | `C` | Company |
+| `pan-h` | `H` | HUF |
+| `pan-f` | `F` | Firm |
+| `pan-a` | `A` | AOP |
+| `pan-t` | `T` | Trust |
+
+```yaml
+unique_fields:
+  pan: pan-p      # Individual PAN
+  pan: pan-c      # Company PAN
+  pan: pan        # random entity type
+```
+
+### Custom Generators (Plugin System)
+
+Register your own generator functions when using `api-chain-runner` as a library:
+
+```python
+import random
+from api_chain_runner import ChainRunner
+
+runner = ChainRunner("my_chain.yaml")
+runner.generator.register_generator(
+    "name", lambda: random.choice(["Alice", "Bob", "Charlie"])
+)
+result = runner.run()
+```
+
+Then use it in YAML:
+
+```yaml
+unique_fields:
+  customer_name: name
+```
+
+- Function must take no args and return a string.
+- Cannot override built-ins (`email`, `pan`, `mobile`, `udyam`).
+
 ### Polling
 
 Wait for async operations to complete:

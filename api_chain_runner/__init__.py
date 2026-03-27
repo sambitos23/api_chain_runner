@@ -3,6 +3,7 @@
 __version__ = "1.0.4"
 
 from api_chain_runner.runner import ChainRunner
+from api_chain_runner.generator import UniqueDataGenerator
 from api_chain_runner.models import (
     ChainResult,
     ConfigurationError,
@@ -15,4 +16,5 @@ __all__ = [
     "ChainResult",
     "ConfigurationError",
     "StepResult",
+    "UniqueDataGenerator",
 ]

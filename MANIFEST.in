@@ -8,6 +8,7 @@ recursive-include api_chain_runner *.py
 # Exclude everything sensitive
 exclude *.yaml
 exclude requirements.txt
+recursive-exclude flow *
 recursive-exclude doc_file *
 recursive-exclude tests *
 recursive-exclude .kiro *
