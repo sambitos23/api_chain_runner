@@ -95,11 +95,13 @@ class StepDefinition:
 
         if self.unique_fields:
             for field_path, gen_type in self.unique_fields.items():
-                if gen_type not in VALID_GENERATOR_TYPES:
+                # Allow pan-p, pan-c etc. to control PAN's 4th character
+                is_pan_with_char = gen_type.startswith("pan-") and len(gen_type) == 5
+                if gen_type not in VALID_GENERATOR_TYPES and not is_pan_with_char:
                     raise ConfigurationError(
                         f"Step '{self.name}': invalid generator type '{gen_type}' "
                         f"for field '{field_path}'. "
-                        f"Must be one of {sorted(VALID_GENERATOR_TYPES)}."
+                        f"Must be one of {sorted(VALID_GENERATOR_TYPES)} or pan-[PCHFAT]."
                     )
 
 
