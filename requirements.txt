@@ -1,6 +1,11 @@
 requests
 pyyaml
+
+# only needed for xlsx export
 openpyxl
+
+# only needed for ui mode
+flask
 
 # dev / testing
 hypothesis

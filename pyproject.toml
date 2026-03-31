@@ -27,6 +27,7 @@ dependencies = [
     "requests",
     "pyyaml",
     "openpyxl",
+    "flask",
 ]
 
 [project.urls]
@@ -45,3 +46,6 @@ version = {attr = "api_chain_runner.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["api_chain_runner*"]
+
+[tool.setuptools.package-data]
+"api_chain_runner" = ["ui/templates/*.html", "ui/static/*.css", "ui/static/*.js"]

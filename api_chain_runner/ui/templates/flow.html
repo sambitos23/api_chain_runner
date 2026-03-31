@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ chain.name }} — API Chain Runner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% include 'icons.html' %}
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <svg class="icon icon-logo"><use href="#i-chain"/></svg>
+                <span class="logo-text">Chain Runner</span>
+            </div>
+            <button class="theme-toggle" id="theme-toggle" title="Toggle theme">
+                <span class="theme-icon-dark"><svg class="icon"><use href="#i-moon"/></svg></span>
+                <span class="theme-icon-light"><svg class="icon"><use href="#i-sun"/></svg></span>
+            </button>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <span class="nav-label">Navigation</span>
+                <a href="/" class="nav-item">
+                    <svg class="icon"><use href="#i-grid"/></svg> Dashboard
+                </a>
+            </div>
+            <div class="nav-section">
+                <span class="nav-label">This Flow</span>
+                <a href="#" class="nav-item active">
+                    <svg class="icon"><use href="#i-flow"/></svg> {{ chain.name }}
+                </a>
+                <a href="#" class="nav-item" id="nav-editor-toggle">
+                    <svg class="icon"><use href="#i-edit"/></svg> Editor
+                </a>
+            </div>
+        </nav>
+    </aside>
+
+    <main class="main-content dot-bg">
+        <div class="topbar">
+            <div class="breadcrumb">
+                <svg class="icon icon-sm"><use href="#i-chain"/></svg>
+                <a href="/">Flows</a>
+                <span class="bc-sep">/</span>
+                <span>{{ chain.name }}</span>
+            </div>
+            <div class="topbar-actions">
+                <button id="run-btn" class="btn btn-primary">
+                    <svg class="icon icon-sm"><use href="#i-play"/></svg> Run Chain
+                </button>
+                <button id="pause-btn" class="btn btn-subtle hidden">
+                    <svg class="icon icon-sm"><use href="#i-pause"/></svg> Pause
+                </button>
+                <button id="resume-btn" class="btn btn-primary hidden">
+                    <svg class="icon icon-sm"><use href="#i-play"/></svg> Resume
+                </button>
+                <span id="run-status" class="run-status-badge"></span>
+            </div>
+        </div>
+
+        <div class="page-content flow-page-content">
+            <div class="flow-info-bar">
+                <div class="info-chip">
+                    <span class="chip-label">Steps</span>
+                    <span class="chip-value">{{ chain.steps | length }}</span>
+                </div>
+                {% if chain.variables %}
+                <div class="info-chip">
+                    <span class="chip-label">Variables</span>
+                    <span class="chip-value">{{ chain.variables | join(', ') }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="flow-canvas-wrapper">
+                <div id="flow-canvas" class="flow-canvas"></div>
+            </div>
+
+            <div id="response-panel" class="response-panel hidden">
+                <div class="response-header">
+                    <h3>Step Responses</h3>
+                    <button id="response-close" class="btn-icon-only"><svg class="icon"><use href="#i-x"/></svg></button>
+                </div>
+                <div id="response-list" class="response-list"></div>
+            </div>
+
+            <div id="editor-panel" class="editor-panel hidden">
+                <div class="editor-header">
+                    <h3>Edit Flow — {{ flow_path }}</h3>
+                    <div class="editor-actions">
+                        <button id="editor-save" class="btn btn-subtle btn-sm">
+                            <svg class="icon icon-sm"><use href="#i-save"/></svg> Save
+                        </button>
+                        <button id="editor-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+                    </div>
+                </div>
+                <div class="editor-status" id="editor-status"></div>
+                <textarea id="yaml-editor" class="yaml-editor" spellcheck="false"></textarea>
+            </div>
+        </div>
+    </main>
+
+    <!-- Step detail slide-over (from right) -->
+    <div id="step-detail" class="step-detail-overlay hidden">
+        <div class="step-detail-backdrop"></div>
+        <div class="step-detail-panel">
+            <div class="detail-header">
+                <h3 id="detail-name"></h3>
+                <button id="detail-close" class="btn-icon-only"><svg class="icon"><use href="#i-x"/></svg></button>
+            </div>
+            <div id="detail-body" class="detail-body"></div>
+            <div class="detail-footer">
+                <button id="detail-save" class="btn btn-subtle btn-sm">
+                    <svg class="icon icon-sm"><use href="#i-save"/></svg> Save Changes
+                </button>
+                <span id="detail-save-status" class="detail-save-status"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CHAIN_DATA = {{ chain | tojson }};
+        const FLOW_PATH = {{ flow_path | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='flow.js') }}"></script>
+</body>
+</html>

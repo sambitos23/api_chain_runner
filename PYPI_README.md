@@ -50,6 +50,9 @@ api-chain-runner my_chain.yaml -o output/results.csv
 # Excel output
 api-chain-runner my_chain.yaml -o results.xlsx -f xlsx
 
+# Launch web UI
+api-chain-runner --ui flow/
+
 # Check version
 api-chain-runner --version
 ```
@@ -239,6 +242,34 @@ Pause the chain for manual actions (e.g. filling a form in a browser):
 
 Press `p` to pause between steps, `r` or `Enter` to resume, `Ctrl+C` to abort.
 
+### Web UI
+
+API Chain Runner includes a built-in web dashboard for visualizing, editing, and running your chains from the browser.
+
+```bash
+# Launch the UI (scans current directory for YAML flows)
+api-chain-runner --ui
+
+# Point to a specific flow directory
+api-chain-runner --ui flow/
+
+# Custom port
+api-chain-runner --ui flow/ --port 8080
+```
+
+This opens a local web server at `http://127.0.0.1:5656` with:
+
+- **Dashboard** — lists all discovered YAML chain files with step counts and folder grouping
+- **Flow Visualization** — vertical flowchart with method badges, connector arrows, and status indicators
+- **Run from UI** — execute flows live with real-time pass/fail status and color-coded HTTP status codes
+- **Step Responses** — response table with status, duration, and resizable response body preview
+- **Step Editor** — click any step to edit URL, headers, payload directly and save back to the YAML file
+- **Full YAML Editor** — edit the raw YAML with save support
+- **Create New Flows** — create new chains from the dashboard with name, folder, and initial steps
+- **Dark / Light Mode** — toggle themes with persistent preference
+
+No extra setup needed — the UI is included in the package.
+
 ## Step Fields Reference
 
 | Field | Required | Description |
@@ -288,7 +319,7 @@ Results are logged to CSV or Excel with timestamps, including full request/respo
 
 - Python 3.10+
 
-All dependencies (`requests`, `pyyaml`, `openpyxl`) are installed automatically.
+All dependencies (`requests`, `pyyaml`, `openpyxl`, `flask`) are installed automatically.
 
 ## License
 

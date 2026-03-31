@@ -27,6 +27,9 @@ python -m api_chain_runner my_chain.yaml -o output/results.csv
 
 # Excel output
 python -m api_chain_runner my_chain.yaml -o results.xlsx -f xlsx
+
+# Launch web UI
+python -m api_chain_runner --ui flow/
 ```
 
 ## YAML Chain Format
@@ -434,6 +437,34 @@ You can use any valid Python comparison in `eval_condition`:
 
 All timestamps in the CSV/Excel output are recorded in Indian Standard Time (IST, UTC+5:30).
 
+## Web UI
+
+API Chain Runner includes a built-in web dashboard for visualizing, editing, and running your chains from the browser.
+
+```bash
+# Launch the UI (scans current directory for YAML flows)
+python -m api_chain_runner --ui
+
+# Point to a specific flow directory
+python -m api_chain_runner --ui flow/
+
+# Custom port
+python -m api_chain_runner --ui flow/ --port 8080
+```
+
+This opens a local web server at `http://127.0.0.1:5656` with:
+
+- **Dashboard** — lists all discovered YAML chain files in a card grid, with step counts and folder grouping
+- **Flow Visualization** — each chain is rendered as a vertical flowchart with step boxes, method badges (GET/POST/PUT/DELETE), and connector arrows
+- **Run from UI** — click "Run Chain" to execute the flow live; each step lights up with pass/fail status and HTTP status codes color-coded (green for 2xx, orange for 4xx, red for 5xx)
+- **Step Responses** — after a run, a response table shows every step's status code, duration, and response body with resizable preview
+- **Step Editor** — click any step to open a slide-over drawer showing full details (URL, headers, payload, polling config); editable fields can be modified and saved directly back to the YAML file
+- **Full YAML Editor** — open the raw YAML editor from the sidebar to edit the entire flow file with syntax-aware editing and save
+- **Create New Flows** — click "New Flow" on the dashboard to create a new chain with a name, optional folder, and initial steps
+- **Dark / Light Mode** — toggle between dark and light themes; preference is persisted across sessions
+
+The UI is a built-in feature of the package — anyone who installs `api-chain-runner` gets it with no extra setup.
+
 ## Architecture
 
 ```
@@ -486,3 +517,4 @@ pytest
 - `requests` — HTTP client
 - `pyyaml` — YAML parsing
 - `openpyxl` — Excel output (optional, only needed for `-f xlsx`)
+- `flask` — Web UI server (only needed for `--ui` mode)

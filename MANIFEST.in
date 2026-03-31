@@ -4,6 +4,8 @@ include pyproject.toml
 
 # Only include the package source code
 recursive-include api_chain_runner *.py
+recursive-include api_chain_runner/ui/templates *.html
+recursive-include api_chain_runner/ui/static *.css *.js
 
 # Exclude everything sensitive
 exclude *.yaml

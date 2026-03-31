@@ -5,6 +5,7 @@ Usage::
     python -m api_chain_runner example_chain.yaml
     python -m api_chain_runner example_chain.yaml -o results.csv
     python -m api_chain_runner example_chain.yaml -o results.xlsx -f xlsx
+    python -m api_chain_runner --ui flow/
 """
 
 from __future__ import annotations
@@ -15,6 +16,32 @@ import yaml
 from api_chain_runner import __version__
 from api_chain_runner.logger import ResultLogger
 from api_chain_runner.runner import ChainRunner
+
+
+def _load_env_file(env_path: str = ".env") -> None:
+    """Load key=value pairs from a .env file into os.environ.
+
+    Skips blank lines and comments (lines starting with #).
+    Strips optional quotes around values.
+    Does not override existing environment variables.
+    """
+    if not os.path.isfile(env_path):
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Strip surrounding quotes
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            if key and key not in os.environ:
+                os.environ[key] = value
 
 
 def _substitute_env_vars(obj):
@@ -73,7 +100,22 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
+        "--ui",
+        nargs="?",
+        const=".",
+        default=None,
+        metavar="FLOW_DIR",
+        help="Launch the web UI. Optionally specify a directory to scan for YAML flows (default: current dir).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=5656,
+        help="Port for the web UI server (default: 5656).",
+    )
+    parser.add_argument(
         "config",
+        nargs="?",
         help="Path to the YAML chain configuration file.",
     )
     parser.add_argument(
@@ -89,6 +131,13 @@ def build_parser() -> argparse.ArgumentParser:
         default="csv",
         help="Output format: csv (default) or xlsx.",
     )
+    parser.add_argument(
+        "-e",
+        "--env",
+        default=".env",
+        metavar="ENV_FILE",
+        help="Path to .env file (default: .env in current directory).",
+    )
     return parser
 
 
@@ -96,6 +145,18 @@ def main(argv: list[str] | None = None) -> None:
     """Parse arguments, run the chain, and print a summary."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Load .env file into os.environ
+    _load_env_file(args.env)
+
+    # Launch web UI mode
+    if args.ui is not None:
+        from api_chain_runner.ui.server import start_server
+        start_server(flow_dir=args.ui, port=args.port)
+        return
+
+    if not args.config:
+        parser.error("config is required when not using --ui")
 
     # Pre-process config to resolve ${ENV:...} placeholders
     processed_config = _preprocess_config(args.config)

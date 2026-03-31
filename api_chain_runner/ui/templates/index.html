@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Chain Runner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% include 'icons.html' %}
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <svg class="icon icon-logo"><use href="#i-chain"/></svg>
+                <span class="logo-text">Chain Runner</span>
+            </div>
+            <button class="theme-toggle" id="theme-toggle" title="Toggle theme">
+                <span class="theme-icon-dark"><svg class="icon"><use href="#i-moon"/></svg></span>
+                <span class="theme-icon-light"><svg class="icon"><use href="#i-sun"/></svg></span>
+            </button>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <span class="nav-label">Navigation</span>
+                <a href="/" class="nav-item active">
+                    <svg class="icon"><use href="#i-grid"/></svg> Dashboard
+                </a>
+            </div>
+            <div class="nav-section">
+                <span class="nav-label">Flows</span>
+                {% set ns = namespace(current_folder='') %}
+                {% for flow in flows %}
+                    {% if flow.folder != ns.current_folder %}
+                        {% set ns.current_folder = flow.folder %}
+                        {% if flow.folder %}
+                        <div class="nav-folder">
+                            <svg class="icon icon-sm"><use href="#i-folder"/></svg> {{ flow.folder }}
+                        </div>
+                        {% endif %}
+                    {% endif %}
+                    <a href="/flow/{{ flow.path }}" class="nav-item {{ 'nav-indent' if flow.folder else '' }}">
+                        <svg class="icon"><use href="#i-file"/></svg> {{ flow.name }}
+                    </a>
+                {% endfor %}
+            </div>
+        </nav>
+    </aside>
+
+    <main class="main-content dot-bg">
+        <div class="topbar">
+            <div class="breadcrumb">
+                <svg class="icon icon-sm"><use href="#i-chain"/></svg>
+                <span>Dashboard</span>
+            </div>
+            <div class="topbar-actions">
+                <button class="btn btn-subtle" id="create-flow-btn">
+                    <svg class="icon icon-sm"><use href="#i-plus"/></svg> New Flow
+                </button>
+            </div>
+        </div>
+        <div class="page-content">
+            <div class="page-header">
+                <h1>All Flows</h1>
+                <p class="page-subtitle">{{ flows | length }} chain{{ 's' if flows | length != 1 else '' }} available</p>
+            </div>
+            <div class="flow-grid">
+                {% for flow in flows %}
+                <a href="/flow/{{ flow.path }}" class="flow-card">
+                    <div class="card-top">
+                        <div class="card-icon"><svg class="icon icon-lg"><use href="#i-file"/></svg></div>
+                        <div class="card-meta">
+                            <h3>{{ flow.name }}</h3>
+                            <span class="card-path">{{ flow.path }}</span>
+                        </div>
+                    </div>
+                    <div class="card-bottom">
+                        <div class="card-stat">
+                            <span class="stat-value">{{ flow.step_count }}</span>
+                            <span class="stat-label">steps</span>
+                        </div>
+                        <svg class="icon icon-sm card-arrow"><use href="#i-arrow-right"/></svg>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+            {% if not flows %}
+            <div class="empty-state">
+                <svg class="icon icon-xl" style="color:var(--text-muted)"><use href="#i-file"/></svg>
+                <p>No YAML chain files found</p>
+                <p class="empty-hint">Place <code>.yaml</code> files with a <code>chain</code> key in the flow directory</p>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+
+    <!-- Create Flow Modal -->
+    <div id="create-modal" class="modal-overlay hidden">
+        <div class="modal-panel">
+            <div class="modal-header">
+                <h3>Create New Flow</h3>
+                <button class="btn-icon-only" id="create-modal-close">
+                    <svg class="icon"><use href="#i-x"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">Flow Name</label>
+                <input type="text" id="new-flow-name" class="form-input" placeholder="e.g. my_new_flow">
+                <label class="form-label" style="margin-top:0.75rem">Folder (optional)</label>
+                <input type="text" id="new-flow-folder" class="form-input" placeholder="e.g. pan_verfication_module/bharatpe">
+                <label class="form-label" style="margin-top:0.75rem">Initial Steps</label>
+                <div id="new-flow-steps" class="new-flow-steps">
+                    <div class="new-step-row">
+                        <input type="text" class="form-input form-input-sm" placeholder="Step name" value="auth">
+                        <select class="form-select form-input-sm">
+                            <option>POST</option><option>GET</option><option>PUT</option>
+                            <option>DELETE</option><option>PATCH</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="add-step-btn" style="margin-top:0.5rem">
+                    <svg class="icon icon-sm"><use href="#i-plus"/></svg> Add Step
+                </button>
+                <div id="create-status" class="create-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="create-cancel">Cancel</button>
+                <button class="btn btn-subtle" id="create-submit">
+                    <svg class="icon icon-sm"><use href="#i-save"/></svg> Create
+                </button>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='create.js') }}"></script>
+</body>
+</html>
