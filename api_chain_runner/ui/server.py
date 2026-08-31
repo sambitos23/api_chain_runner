@@ -7,12 +7,14 @@ import json
 import os
 import threading
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 import yaml
 from flask import Flask, jsonify, render_template, request
 
 from api_chain_runner.runner import ChainRunner
+from api_chain_runner.models import VALID_CONDITION_OPERATORS
 
 app = Flask(
     __name__,
@@ -22,6 +24,11 @@ app = Flask(
 
 # Will be set by start_server()
 _flow_dir: str = "."
+
+
+def _local_timestamp() -> str:
+    """Return the local timezone timestamp used by the UI response timeline."""
+    return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
 def _discover_flows(base_dir: str) -> list[dict]:
@@ -55,6 +62,51 @@ def _discover_flows(base_dir: str) -> list[dict]:
     return flows
 
 
+def _normalize_conditions(value, *, field_name="condition") -> list[dict[str, str]]:
+    """Return condition data in the UI's ordered-list representation.
+
+    ChainRunner accepts both the legacy single mapping form and the current
+    list form.  The UI always receives and persists a list, with values
+    normalized to strings so the result can be loaded by ChainRunner without
+    changing condition comparison semantics.
+    """
+    if value is None:
+        return []
+    entries = [value] if isinstance(value, dict) else value
+    if not isinstance(entries, list):
+        raise ValueError(f"'{field_name}' must be a mapping or list of mappings")
+
+    normalized = []
+    required = ("step", "key_path", "expected_value")
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"condition at index {index} must be a mapping")
+        missing = [name for name in required if name not in entry]
+        if missing:
+            raise ValueError(
+                f"condition at index {index} missing required field(s): {', '.join(missing)}"
+            )
+        if not isinstance(entry["step"], str) or not entry["step"].strip():
+            raise ValueError(f"condition at index {index} 'step' must be a non-empty string")
+        if not isinstance(entry["key_path"], str) or not entry["key_path"].strip():
+            raise ValueError(f"condition at index {index} 'key_path' must be a non-empty string")
+        operator = str(entry.get("operator", "equals")).strip().lower()
+        if operator not in VALID_CONDITION_OPERATORS:
+            raise ValueError(
+                f"condition at index {index} has invalid operator '{operator}'"
+            )
+        normalized_entry = {
+            "step": entry["step"],
+            "key_path": entry["key_path"],
+            "expected_value": str(entry["expected_value"]),
+        }
+        # Keep legacy YAML/UI output unchanged when operator was omitted.
+        if "operator" in entry:
+            normalized_entry["operator"] = operator
+        normalized.append(normalized_entry)
+    return normalized
+
+
 def _parse_chain(filepath: str) -> dict:
     """Parse a YAML chain file and return structured data for visualization."""
     with open(filepath, "r", encoding="utf-8") as f:
@@ -65,6 +117,7 @@ def _parse_chain(filepath: str) -> dict:
     for step in chain:
         if not isinstance(step, dict):
             continue
+        condition = _normalize_conditions(step.get("condition"))
         step_info = {
             "name": step.get("name", "unnamed"),
             "method": step.get("method", "MANUAL") if not step.get("manual") else "MANUAL",
@@ -75,7 +128,8 @@ def _parse_chain(filepath: str) -> dict:
             "has_payload": "payload" in step,
             "has_files": "files" in step,
             "has_unique_fields": "unique_fields" in step,
-            "has_condition": "condition" in step,
+            "has_condition": bool(condition),
+            "condition": condition,
             "manual": step.get("manual", False),
             "instruction": step.get("instruction", ""),
             "print_ref": step.get("print_ref", []),
@@ -164,7 +218,37 @@ def _run_chain_thread(run_id: str, filepath: str):
             runner.pause_controller.wait_if_paused()
 
             try:
+                execution_time = None
+                if step.condition:
+                    execution_time = _local_timestamp()
+                    skip = False
+                    for cond in step.condition:
+                        if runner.store.has(cond.step):
+                            from api_chain_runner.executor import StepExecutor
+                            stored = runner.store.get_raw(cond.step)
+                            actual = StepExecutor._get_nested(stored, cond.key_path)
+                            if not runner.condition_matches(actual, cond):
+                                skip = True
+                                break
+                        else:
+                            skip = True
+                            break
+                    if skip:
+                        step_result = {
+                            "step_name": step.name,
+                            "status_code": 0,
+                            "success": True,
+                            "duration_ms": 0,
+                            "executed_at": execution_time or _local_timestamp(),
+                            "error": None,
+                            "skipped": True,
+                        }
+                        with _run_lock:
+                            _active_runs[run_id]["results"].append(step_result)
+                        continue
+
                 if step.manual:
+                    execution_time = _local_timestamp()
                     # Resolve print_ref values from previous steps
                     resolved_refs = {}
                     if step.print_ref:
@@ -207,42 +291,16 @@ def _run_chain_thread(run_id: str, filepath: str):
                         "status_code": 0,
                         "success": True,
                         "duration_ms": 0,
+                        "executed_at": execution_time,
                         "error": None,
                         "manual": True,
                     }
-                    if resolved_refs:
-                        step_result["printed_keys"] = resolved_refs
                 else:
-                    if step.condition:
-                        skip = False
-                        for cond in step.condition:
-                            if runner.store.has(cond.step):
-                                from api_chain_runner.executor import StepExecutor
-                                stored = runner.store.get_raw(cond.step)
-                                actual = StepExecutor._get_nested(stored, cond.key_path)
-                                if str(actual) != cond.expected_value:
-                                    skip = True
-                                    break
-                            else:
-                                skip = True
-                                break
-                        if skip:
-                            step_result = {
-                                "step_name": step.name,
-                                "status_code": 0,
-                                "success": True,
-                                "duration_ms": 0,
-                                "error": None,
-                                "skipped": True,
-                            }
-                            with _run_lock:
-                                _active_runs[run_id]["results"].append(step_result)
-                            continue
-
                     if step.delay > 0:
                         import time
                         time.sleep(step.delay)
 
+                    execution_time = _local_timestamp()
                     result = runner.executor.execute(step)
                     resp_preview = json.dumps(result.response_body, indent=2, default=str) if isinstance(result.response_body, (dict, list)) else str(result.response_body)
 
@@ -251,6 +309,7 @@ def _run_chain_thread(run_id: str, filepath: str):
                         "status_code": result.status_code,
                         "success": result.success,
                         "duration_ms": round(result.duration_ms, 1),
+                        "executed_at": execution_time,
                         "error": result.error,
                         "response_body": resp_preview,
                     }
@@ -298,6 +357,7 @@ def _run_chain_thread(run_id: str, filepath: str):
                                     "status_code": 0,
                                     "success": False,
                                     "duration_ms": 0,
+                                    "executed_at": "",
                                     "error": "Not executed (chain aborted)",
                                     "skipped": True,
                                 }
@@ -314,6 +374,7 @@ def _run_chain_thread(run_id: str, filepath: str):
                     "status_code": -1,
                     "success": False,
                     "duration_ms": 0,
+                    "executed_at": execution_time or "",
                     "error": str(exc),
                     "response_body": "",
                 }
@@ -430,17 +491,42 @@ def api_step_update(flow_path, step_index):
             return jsonify({"error": "step index out of range"}), 400
 
         step = chain[step_index]
+        # Validate conditions before mutating any other field so malformed
+        # editor submissions cannot partially save a step.
+        normalized_condition = None
+        if "condition" in updates:
+            submitted_condition = updates["condition"]
+            if not isinstance(submitted_condition, list):
+                return jsonify({"error": "'condition' must be a list of mappings"}), 400
+            try:
+                normalized_condition = _normalize_conditions(submitted_condition)
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+
         # Apply updates to allowed fields
-        allowed = {"payload", "headers", "url", "unique_fields", "delay", "continue_on_error", "method", "files", "print_keys", "polling", "eval_keys", "eval_condition", "success_message", "failure_message", "manual", "instruction", "print_ref", "retry"}
+        allowed = {"payload", "headers", "url", "unique_fields", "delay", "continue_on_error", "method", "files", "print_keys", "polling", "eval_keys", "eval_condition", "success_message", "failure_message", "manual", "instruction", "print_ref", "retry", "condition"}
         for key, value in updates.items():
-            if key in allowed:
-                if value is None or value == "":
-                    step.pop(key, None)
+            if key not in allowed:
+                continue
+            if key == "condition":
+                if normalized_condition:
+                    step[key] = normalized_condition
                 else:
-                    step[key] = value
+                    # An explicit empty list is the clearing contract.
+                    step.pop(key, None)
+            elif value is None or value == "":
+                step.pop(key, None)
+            else:
+                step[key] = value
 
         # Write back preserving original formatting as much as possible
-        dumped = yaml.dump(raw, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        dumped = yaml.dump(
+            raw,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+            default_style='"',
+        )
         formatted = _format_yaml_for_readability(dumped)
         with open(abs_path, "w", encoding="utf-8") as f:
             f.write(formatted)

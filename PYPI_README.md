@@ -302,10 +302,10 @@ files:
 
 ### Conditional Steps
 
-Skip steps based on previous responses:
+Condition operators include `equals` (the default), `not_equals`, `contains`, `not_contains`, `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal`, `starts_with`, `ends_with`, `is_null`, and `is_not_null`. Multiple conditions are ANDed. Use `contains` for list membership; unlike `eval_condition`, a `condition` controls whether the dependent step runs.
 
 ```yaml
-# Single condition
+# Single condition (operator defaults to `equals`)
 - name: generate-link
   url: "https://api.example.com/link"
   method: POST
@@ -313,6 +313,16 @@ Skip steps based on previous responses:
     step: check-status
     key_path: "status"
     expected_value: "PENDING"
+
+# List membership
+- name: next-step
+  url: "https://api.example.com/next"
+  method: POST
+  condition:
+    step: get-lead-status
+    key_path: "lead_status"
+    operator: contains
+    expected_value: "okyc"
 
 # Multiple conditions (ALL must pass)
 - name: ready-to-sanction

@@ -43,7 +43,7 @@
             <div class="nav-section">
                 <span class="nav-label">This Flow</span>
                 <a href="/flow/{{ flow_path }}" class="nav-item"><svg class="icon"><use href="#i-flow"/></svg> Flow View</a>
-                <a href="#" class="nav-item active"><svg class="icon"><use href="#i-file"/></svg> Documentation</a>
+                <a href="#" class="nav-item nav-file-item active" data-file-name="{{ flow_name }}"><svg class="icon"><use href="#i-file"/></svg><span class="nav-file-name">{{ flow_name }}</span></a>
             </div>
         </nav>
     </aside>
@@ -167,6 +167,7 @@
     </script>
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
     <script src="{{ url_for('static', filename='docs.js') }}"></script>
 </body>
 </html>

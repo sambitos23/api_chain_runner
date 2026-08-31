@@ -30,13 +30,34 @@ class PollingConfig:
     expected_values: list[str] | None = None  # list of acceptable values (e.g. ["APPROVED", "COMPLETED"])
 
 
+VALID_CONDITION_OPERATORS = frozenset({
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "greater_than",
+    "greater_than_or_equal",
+    "less_than",
+    "less_than_or_equal",
+    "starts_with",
+    "ends_with",
+    "is_null",
+    "is_not_null",
+})
+
+
 @dataclass
 class ConditionConfig:
-    """Condition to check before executing a step."""
+    """Condition to check before executing a step.
+
+    ``operator`` defaults to ``equals`` so existing condition configurations
+    retain their original exact-string comparison behavior.
+    """
 
     step: str  # name of the previous step whose response to check
     key_path: str  # dot-notation path in that step's response
-    expected_value: str  # value that must match for this step to run
+    expected_value: str  # value used by the operator
+    operator: str = "equals"
 
 
 # Default retry: 3 attempts on timeout/connection/5xx errors

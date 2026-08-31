@@ -14,10 +14,12 @@
     const responsePanel = document.getElementById("response-panel");
     const responseList = document.getElementById("response-list");
     const responseClose = document.getElementById("response-close");
+    const responseDownloadCsv = document.getElementById("response-download-csv");
 
     const steps = CHAIN_DATA.steps;
     const stepBoxes = [];
     let currentStepIndex = -1;
+    let currentResponseResults = [];
 
     // ── Render VERTICAL flow ─────────────────────────────────
     function renderFlow() {
@@ -29,7 +31,8 @@
             node.className = "step-node";
             node.dataset.index = i;
 
-            // Wrap box + print_keys in a row container
+            // Keep the original compact row: side output is attached to the
+            // same row while the card, label, and arrow remain in the canvas.
             const row = document.createElement("div");
             row.className = "step-row";
 
@@ -52,18 +55,20 @@
             `;
 
             row.appendChild(box);
-
             node.appendChild(row);
+
             const idx = document.createElement("div");
             idx.className = "step-index";
             idx.textContent = `Step ${i + 1}`;
             node.appendChild(idx);
 
-            node.addEventListener("click", (e) => { e.stopPropagation(); showDetail(step, i); });
+            // Only the step card opens the detail drawer. The row, label,
+            // arrow, and side output are deliberately non-interactive.
+            box.addEventListener("click", (e) => { e.stopPropagation(); showDetail(step, i); });
             canvas.appendChild(node);
             stepBoxes.push(box);
 
-            // Vertical arrow between steps
+            // Vertical arrow between steps remains in the original canvas flow.
             if (i < steps.length - 1) {
                 const arrow = document.createElement("div");
                 arrow.className = "step-arrow";
@@ -92,6 +97,7 @@
             html += `<div class="detail-row"><div class="detail-label">Type</div><div class="detail-value">Manual Step</div></div>`;
             html += editableRow("instruction", "Instruction", step.instruction || "");
             html += buildListField("print_ref", "Print References", step.print_ref || [], "e.g. create-lead.leadId");
+            html += buildToggleSection("condition", "Conditions", (step.condition || []).length ? step.condition : null, buildConditionFields);
             html += numberRow("delay", "Delay (seconds)", step.delay || 0);
             html += dropdownRow("continue_on_error", "Continue on Error", step.continue_on_error);
         } else {
@@ -112,6 +118,7 @@
 
             // Print Keys — structured list
             html += buildListField("print_keys", "Print Keys", step.print_keys || [], "e.g. leadId");
+            html += buildToggleSection("condition", "Conditions", (step.condition || []).length ? step.condition : null, buildConditionFields);
 
             // Polling — structured
             const p = (step.has_polling && step.polling) ? step.polling : null;
@@ -130,6 +137,7 @@
         detailBody.innerHTML = html;
         wireToggleSections();
         wireListFields();
+        wireConditionFields();
         detailOverlay.classList.remove("hidden");
     }
 
@@ -180,35 +188,109 @@
         });
     }
 
+    function buildConditionFields(conditions) {
+        let html = `<div class="condition-param">
+            <div class="condition-entries">`;
+        (conditions || []).forEach(condition => {
+            html += buildConditionEntry(condition);
+        });
+        return html + `</div><button type="button" class="btn btn-ghost btn-sm condition-add">+ Add Condition</button></div>`;
+    }
+
+    function conditionOperatorOptions(current) {
+        const options = [
+            ["equals", "Equals"],
+            ["not_equals", "Not equals"],
+            ["contains", "Contains"],
+            ["not_contains", "Does not contain"],
+            ["greater_than", "Greater than"],
+            ["greater_than_or_equal", "Greater than or equal"],
+            ["less_than", "Less than"],
+            ["less_than_or_equal", "Less than or equal"],
+            ["starts_with", "Starts with"],
+            ["ends_with", "Ends with"],
+            ["is_null", "Is null"],
+            ["is_not_null", "Is not null"],
+        ];
+        const selected = current || "equals";
+        return options.map(([value, label]) =>
+            `<option value="${value}"${selected === value ? " selected" : ""}>${label}</option>`
+        ).join("");
+    }
+
+    function buildConditionEntry(condition) {
+        const item = condition || {};
+        return `<div class="condition-entry">
+            <label class="poll-label">Source Step</label>
+            <input class="detail-editable-input condition-input" data-condition="step" value="${esc(String(item.step ?? ""))}" placeholder="e.g. check-status" spellcheck="false">
+            <label class="poll-label">Response Key Path</label>
+            <input class="detail-editable-input condition-input" data-condition="key_path" value="${esc(String(item.key_path ?? ""))}" placeholder="e.g. status.value" spellcheck="false">
+            <label class="poll-label">Operator</label>
+            <select class="detail-select condition-input" data-condition="operator">
+                ${conditionOperatorOptions(item.operator)}
+            </select>
+            <label class="poll-label">Expected Value</label>
+            <input class="detail-editable-input condition-input" data-condition="expected_value" value="${esc(String(item.expected_value ?? ""))}" placeholder="e.g. SUCCESS" spellcheck="false">
+            <button type="button" class="btn-icon-only condition-remove" title="Remove condition" aria-label="Remove condition">×</button>
+        </div>`;
+    }
+
+    function wireConditionFields() {
+        if (detailBody.dataset.conditionWired) return;
+        detailBody.dataset.conditionWired = "true";
+        detailBody.addEventListener("click", (event) => {
+            const addButton = event.target.closest(".condition-add");
+            if (addButton && detailBody.contains(addButton)) {
+                const entries = addButton.closest(".condition-param").querySelector(".condition-entries");
+                const wrapper = document.createElement("div");
+                wrapper.innerHTML = buildConditionEntry({});
+                const entry = wrapper.firstElementChild;
+                entries.appendChild(entry);
+                entry.querySelector('[data-condition="step"]').focus();
+                return;
+            }
+            const removeButton = event.target.closest(".condition-remove");
+            if (removeButton && detailBody.contains(removeButton)) {
+                removeButton.closest(".condition-entry").remove();
+            }
+        });
+    }
+
     // Toggle section — add/remove structured block
     function buildToggleSection(id, label, data, buildFn) {
-        const hasData = !!data;
+        const hasData = data !== null && data !== undefined;
         return `<div class="detail-row"><div class="detail-label">${esc(label)}</div>
             <div class="toggle-section" id="${id}-section">
                 ${hasData ? buildFn(data) : `<div class="polling-empty">Not configured</div>`}
-                <button class="btn btn-ghost btn-sm toggle-btn" data-target="${id}" style="margin-top:0.4rem">${hasData ? "Remove" : "+ Add"}</button>
+                <button type="button" class="btn btn-ghost btn-sm toggle-btn" data-target="${id}" style="margin-top:0.4rem">${hasData ? "Remove" : "+ Add"}</button>
             </div></div>`;
     }
 
     function wireToggleSections() {
-        detailBody.querySelectorAll(".toggle-btn").forEach(btn => {
-            btn.addEventListener("click", function() {
-                const id = this.dataset.target;
-                const section = document.getElementById(id + "-section");
-                const hasParam = section.querySelector(".polling-param, .eval-param");
-                if (hasParam) {
-                    section.innerHTML = `<div class="polling-empty">Not configured</div><button class="btn btn-ghost btn-sm toggle-btn" data-target="${id}" style="margin-top:0.4rem">+ Add</button>`;
-                } else {
-                    const buildFn = id === "polling" ? buildPollingFields : id === "retry" ? buildRetryFields : buildEvalFields;
-                    const defaults = id === "polling"
-                        ? {key_path:"",expected_values:[],interval:10,max_timeout:120}
-                        : id === "retry"
-                        ? {max_attempts:3,delay:5,retry_on:["timeout","connection","5xx"]}
-                        : {eval_keys:{},eval_condition:"",success_message:"",failure_message:""};
-                    section.innerHTML = buildFn(defaults) + `<button class="btn btn-ghost btn-sm toggle-btn" data-target="${id}" style="margin-top:0.4rem">Remove</button>`;
-                }
-                wireToggleSections();
-            });
+        if (detailBody.dataset.toggleWired) return;
+        detailBody.dataset.toggleWired = "true";
+        detailBody.addEventListener("click", (event) => {
+            const button = event.target.closest(".toggle-btn");
+            if (!button || !detailBody.contains(button)) return;
+            const id = button.dataset.target;
+            const section = document.getElementById(id + "-section");
+            const hasParam = section.querySelector(".polling-param, .retry-param, .eval-param, .condition-param");
+            if (hasParam) {
+                section.innerHTML = `<div class="polling-empty">Not configured</div><button type="button" class="btn btn-ghost btn-sm toggle-btn" data-target="${id}" style="margin-top:0.4rem">+ Add</button>`;
+                return;
+            }
+            const buildFn = id === "polling" ? buildPollingFields
+                : id === "retry" ? buildRetryFields
+                : id === "condition" ? buildConditionFields
+                : buildEvalFields;
+            const defaults = id === "polling"
+                ? {key_path:"",expected_values:[],interval:10,max_timeout:120}
+                : id === "retry"
+                ? {max_attempts:3,delay:5,retry_on:["timeout","connection","5xx"]}
+                : id === "condition"
+                ? []
+                : {eval_keys:{},eval_condition:"",success_message:"",failure_message:""};
+            section.innerHTML = buildFn(defaults) + `<button type="button" class="btn btn-ghost btn-sm toggle-btn" data-target="${id}" style="margin-top:0.4rem">Remove</button>`;
         });
     }
 
@@ -254,7 +336,140 @@
 
     function readonlyRow(label, value) {
         return `<div class="detail-row"><div class="detail-label">${esc(label)}</div>
-            <div class="detail-value">${esc(String(value))}</div></div>`;
+            <div class="detail-value readonly-value" data-raw-value="${esc(String(value))}">${esc(String(value))}</div></div>`;
+    }
+
+    function attachFloatingTooltip(control) {
+        let tooltip = null;
+
+        const hide = () => {
+            if (tooltip) {
+                tooltip.remove();
+                tooltip = null;
+            }
+        };
+
+        const show = () => {
+            hide();
+            tooltip = document.createElement("div");
+            tooltip.className = "response-floating-tooltip";
+            tooltip.textContent = control.dataset.tooltip || control.title || "";
+            document.body.appendChild(tooltip);
+
+            const rect = control.getBoundingClientRect();
+            const gap = 8;
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const left = Math.min(
+                Math.max(gap, rect.left + (rect.width - tooltipRect.width) / 2),
+                window.innerWidth - tooltipRect.width - gap
+            );
+            const below = rect.bottom + gap;
+            const top = below + tooltipRect.height <= window.innerHeight
+                ? below
+                : rect.top - tooltipRect.height - gap;
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${Math.max(gap, top)}px`;
+            requestAnimationFrame(() => tooltip && tooltip.classList.add("visible"));
+        };
+
+        control._refreshTooltip = show;
+        control.addEventListener("mouseenter", show);
+        control.addEventListener("mouseleave", hide);
+        control.addEventListener("focus", show);
+        control.addEventListener("blur", hide);
+    }
+
+    // Shared bounded value renderer. The raw value is retained on the wrapper;
+    // the preview is presentation-only and is never used for copy or expansion.
+    function renderBoundedValue(value, options = {}) {
+        const rawValue = value === undefined || value === null ? "" : String(value);
+        const label = options.label || "value";
+        const className = options.className || "bounded-value";
+        const expandable = !options.truncate && (rawValue.length > 240 || rawValue.split("\\n").length > 8);
+        const wrapper = document.createElement("div");
+        wrapper.className = `${className} bounded-value-wrapper${expandable ? " is-expandable" : ""}`;
+        wrapper.dataset.rawValue = rawValue;
+
+        const region = document.createElement("div");
+        region.className = "bounded-value-region";
+        region.textContent = rawValue;
+        region.setAttribute("aria-label", `${label} content`);
+        wrapper.appendChild(region);
+
+        const actions = document.createElement("div");
+        actions.className = "bounded-value-actions";
+        const isResponseControl = className.includes("response-value");
+        const copyButton = document.createElement("button");
+        copyButton.type = "button";
+        copyButton.className = "value-copy btn btn-ghost btn-sm";
+        copyButton.setAttribute("aria-label", `Copy ${label}`);
+        copyButton.setAttribute("data-tooltip", "Copy");
+        if (!isResponseControl) copyButton.title = "Copy";
+        copyButton.innerHTML = '<span class="copy-icon" aria-hidden="true"></span>';
+        if (isResponseControl) attachFloatingTooltip(copyButton);
+        const feedback = document.createElement("span");
+        feedback.className = "value-copy-feedback";
+        feedback.setAttribute("role", "status");
+        feedback.setAttribute("aria-live", "polite");
+
+        let tooltipTimer;
+        const showCopyTooltip = (text) => {
+            copyButton.dataset.tooltip = text;
+            if (!isResponseControl) copyButton.title = text;
+            copyButton.dataset.tooltipVisible = "true";
+            if (copyButton._refreshTooltip) copyButton._refreshTooltip();
+            clearTimeout(tooltipTimer);
+            tooltipTimer = setTimeout(() => {
+                copyButton.dataset.tooltip = "Copy";
+                if (!isResponseControl) copyButton.title = "Copy";
+                delete copyButton.dataset.tooltipVisible;
+            }, 1400);
+        };
+
+        copyButton.addEventListener("click", () => {
+            const clipboard = navigator.clipboard;
+            if (!clipboard || typeof clipboard.writeText !== "function") {
+                feedback.textContent = "Clipboard unavailable";
+                feedback.className = "value-copy-feedback error";
+                showCopyTooltip("Copy failed");
+                return;
+            }
+            Promise.resolve().then(() => clipboard.writeText(rawValue)).then(() => {
+                feedback.textContent = "Copied";
+                feedback.className = "value-copy-feedback success";
+                showCopyTooltip("Copied");
+            }).catch(() => {
+                feedback.textContent = "Copy failed";
+                feedback.className = "value-copy-feedback error";
+                showCopyTooltip("Copy failed");
+            });
+        });
+        actions.appendChild(copyButton);
+
+        if (expandable) {
+            const expandButton = document.createElement("button");
+            expandButton.type = "button";
+            expandButton.className = "value-expand btn btn-ghost btn-sm";
+            expandButton.setAttribute("aria-label", `Expand ${label}`);
+            expandButton.setAttribute("aria-expanded", "false");
+            expandButton.setAttribute("data-tooltip", "Expand");
+            if (!isResponseControl) expandButton.title = "Expand";
+            expandButton.innerHTML = '<span class="expand-icon" aria-hidden="true"></span>';
+            if (isResponseControl) attachFloatingTooltip(expandButton);
+            expandButton.addEventListener("click", () => {
+                const expanded = wrapper.classList.toggle("is-expanded");
+                const action = expanded ? "Collapse" : "Expand";
+                expandButton.setAttribute("aria-expanded", String(expanded));
+                expandButton.setAttribute("aria-label", `${action} ${label}`);
+                expandButton.setAttribute("data-tooltip", action);
+                if (!isResponseControl) expandButton.title = action;
+                if (expandButton._refreshTooltip) expandButton._refreshTooltip();
+            });
+            actions.appendChild(expandButton);
+        }
+        actions.appendChild(feedback);
+        wrapper.appendChild(actions);
+        return wrapper;
     }
 
     function esc(str) { const d = document.createElement("div"); d.textContent = str; return d.innerHTML; }
@@ -306,6 +521,32 @@
             });
             updates[field] = items.length ? items : null;
         });
+
+        // Collect structured conditions in DOM order. Empty rows are invalid;
+        // removing the section intentionally submits an explicit empty list.
+        const conditionSection = detailBody.querySelector("#condition-section");
+        const conditionParam = conditionSection && conditionSection.querySelector(".condition-param");
+        if (conditionParam) {
+            const conditions = [];
+            for (const entry of conditionParam.querySelectorAll(".condition-entry")) {
+                const condition = {};
+                for (const field of ["step", "key_path", "operator", "expected_value"]) {
+                    const input = entry.querySelector(`[data-condition="${field}"]`);
+                    condition[field] = input.value;
+                    const optionalExpected = ["is_null", "is_not_null"].includes(condition.operator);
+                    if (!input.value.trim() && !(field === "expected_value" && optionalExpected)) {
+                        detailSaveStatus.textContent = `Condition ${field.replace("_", " ")} is required`;
+                        detailSaveStatus.className = "detail-save-status error";
+                        input.focus();
+                        return;
+                    }
+                }
+                conditions.push(condition);
+            }
+            updates.condition = conditions;
+        } else if (conditionSection) {
+            updates.condition = [];
+        }
 
         // Collect polling
         const pollingParam = detailBody.querySelector(".polling-param");
@@ -398,9 +639,12 @@
             box.className = box.className.replace(/\bstate-\w+/g, "");
             const ind = box.querySelector(".step-result-indicator"); if (ind) ind.remove();
             const sc = box.querySelector(".step-status-code"); if (sc) sc.remove();
+            const row = box.parentElement;
+            row.querySelectorAll(".side-connector, .eval-side-connector").forEach(panel => panel.remove());
         });
         responsePanel.classList.add("hidden");
         responseList.innerHTML = "";
+        currentResponseResults = [];
 
         try {
             const res = await fetch("/api/run", {
@@ -515,7 +759,7 @@
 
         const header = document.createElement("div");
         header.className = "manual-header";
-        header.innerHTML = `<span class="manual-icon">✋</span><span class="manual-title">Manual Step — ${esc(data.manual_step_name)}</span>`;
+        header.innerHTML = `<span class="manual-status-icon" aria-hidden="true"><span></span><span></span><span></span></span><span class="manual-title">Manual Step - ${esc(data.manual_step_name)}</span>`;
         card.appendChild(header);
 
         if (data.manual_instruction) {
@@ -536,18 +780,11 @@
             for (const [k, v] of Object.entries(data.manual_print_ref)) {
                 const row = document.createElement("div");
                 row.className = "manual-ref-row";
-                row.innerHTML = `<span class="manual-ref-key">${esc(k)}</span>`;
-                const valSpan = document.createElement("span");
-                valSpan.className = "manual-ref-val";
-                valSpan.textContent = v;
-                valSpan.title = "Click to copy";
-                valSpan.addEventListener("click", () => {
-                    navigator.clipboard.writeText(v).then(() => {
-                        valSpan.classList.add("pk-copied");
-                        setTimeout(() => valSpan.classList.remove("pk-copied"), 1200);
-                    });
-                });
-                row.appendChild(valSpan);
+                const key = document.createElement("div");
+                key.className = "manual-ref-key";
+                key.textContent = k;
+                row.appendChild(key);
+                row.appendChild(renderBoundedValue(v, { className: "manual-ref-val manual-ref-value", label: `reference ${k}`, truncate: true }));
                 refBlock.appendChild(row);
             }
             card.appendChild(refBlock);
@@ -605,72 +842,94 @@
                     box.appendChild(sc);
                 }
 
-                // Side connector — only add once
-                if (!row.querySelector(".side-connector")) {
-                    const hasPK = r.printed_keys && Object.keys(r.printed_keys).some(k => {
-                        const v = r.printed_keys[k];
-                        return v !== undefined && v !== null && v !== "" && v !== "—" && v !== "null";
-                    });
-                    const hasEval = r.eval_result && Object.keys(r.eval_result).length;
-                    const hasMsg = r.eval_message;
+                // Render evaluation messages to the left and printed keys to the right.
+                // The two surfaces stay independent so each can be bounded and scrolled.
+                const hasPK = r.printed_keys && Object.keys(r.printed_keys).some(k => {
+                    const v = r.printed_keys[k];
+                    return v !== undefined && v !== null && v !== "" && v !== "—" && v !== "null";
+                });
+                const hasMsg = r.eval_message;
 
-                    if (hasPK || hasEval || hasMsg) {
-                        const wrap = document.createElement("div");
-                        wrap.className = "side-connector";
-                        wrap.addEventListener("click", (e) => e.stopPropagation());
+                if (hasMsg && !row.querySelector(".eval-side-connector")) {
+                    const evalWrap = document.createElement("div");
+                    evalWrap.className = "eval-side-connector";
+                    evalWrap.addEventListener("click", (e) => e.stopPropagation());
+                    const evalContent = document.createElement("div");
+                    evalContent.className = "eval-side-content";
+                    const evalBox = document.createElement("div");
+                    evalBox.className = "eval-box";
+                    const msg = document.createElement("div");
+                    msg.className = `eval-msg eval-msg-${r.eval_message.type}`;
+                    msg.textContent = r.eval_message.text;
+                    evalBox.appendChild(msg);
+                    evalContent.appendChild(evalBox);
+                    const evalLine = document.createElement("div");
+                    evalLine.className = "eval-line";
+                    evalWrap.appendChild(evalContent);
+                    evalWrap.appendChild(evalLine);
+                    row.insertBefore(evalWrap, box);
+                }
 
-                        const line = document.createElement("div");
-                        line.className = "pk-line";
-                        wrap.appendChild(line);
+                if (hasPK && !row.querySelector(".side-connector")) {
+                    const wrap = document.createElement("div");
+                    wrap.className = "side-connector";
+                    wrap.addEventListener("click", (e) => e.stopPropagation());
 
-                        const content = document.createElement("div");
-                        content.className = "side-content";
+                    const line = document.createElement("div");
+                    line.className = "pk-line";
+                    wrap.appendChild(line);
 
-                        // Print keys box
-                        if (hasPK) {
-                            const pkBox = document.createElement("div");
-                            pkBox.className = "pk-box";
-                            for (const [k, v] of Object.entries(r.printed_keys)) {
-                                if (v === undefined || v === null || v === "—") continue;
-                                const entry = document.createElement("div");
-                                entry.className = "pk-entry";
-                                const displayKey = k.length > 30 ? "..." + k.slice(-27) : k;
-                                entry.innerHTML = `<span class="pk-key-name" title="${esc(k)}">${esc(displayKey)}</span><span class="pk-key-val" title="${esc(v)} — click to copy">${esc(v)}</span>`;
-                                entry.querySelector(".pk-key-val").addEventListener("click", function() {
-                                    navigator.clipboard.writeText(v).then(() => {
-                                        this.classList.add("pk-copied");
-                                        setTimeout(() => this.classList.remove("pk-copied"), 1200);
-                                    });
-                                });
-                                pkBox.appendChild(entry);
+                    const content = document.createElement("div");
+                    content.className = "side-content";
+                    const pkBox = document.createElement("div");
+                    pkBox.className = "pk-box";
+                    const pkHeader = document.createElement("div");
+                    pkHeader.className = "pk-header";
+                    pkHeader.innerHTML = "<span>Parameters</span><span>Value</span>";
+                    pkBox.appendChild(pkHeader);
+
+                    for (const [k, v] of Object.entries(r.printed_keys)) {
+                        if (v === undefined || v === null || v === "—") continue;
+                        const entry = document.createElement("div");
+                        entry.className = "pk-entry";
+                        entry.innerHTML = `<span class="pk-key-name" title="${esc(k)}">${esc(k)}</span><span class="pk-key-val" title="Copy value">${esc(String(v))}</span>`;
+                        const keyValue = entry.querySelector(".pk-key-val");
+                        const rawValue = String(v);
+                        keyValue.dataset.tooltip = rawValue;
+                        keyValue.title = rawValue;
+                        attachFloatingTooltip(keyValue);
+                        let copyTimer;
+                        keyValue.addEventListener("click", function() {
+                            const clipboard = navigator.clipboard;
+                            if (!clipboard || typeof clipboard.writeText !== "function") {
+                                keyValue.dataset.tooltip = "Copy failed";
+                                keyValue.title = "Copy failed";
+                                keyValue._refreshTooltip();
+                                return;
                             }
-                            content.appendChild(pkBox);
-                        }
-
-                        // Eval box (separate from print keys)
-                        if (hasEval || hasMsg) {
-                            const evalBox = document.createElement("div");
-                            evalBox.className = "eval-box";
-                            if (hasEval) {
-                                for (const [k, v] of Object.entries(r.eval_result)) {
-                                    const entry = document.createElement("div");
-                                    entry.className = "eval-entry";
-                                    entry.innerHTML = `<span class="eval-key">${esc(k)}</span><span class="eval-val">${esc(v)}</span>`;
-                                    evalBox.appendChild(entry);
-                                }
-                            }
-                            if (hasMsg) {
-                                const msg = document.createElement("div");
-                                msg.className = `eval-msg eval-msg-${r.eval_message.type}`;
-                                msg.textContent = r.eval_message.text;
-                                evalBox.appendChild(msg);
-                            }
-                            content.appendChild(evalBox);
-                        }
-
-                        wrap.appendChild(content);
-                        row.appendChild(wrap);
+                            clipboard.writeText(rawValue).then(() => {
+                                keyValue.classList.add("pk-copied");
+                                keyValue.dataset.tooltip = "Copied";
+                                keyValue.title = "Copied";
+                                keyValue._refreshTooltip();
+                                clearTimeout(copyTimer);
+                                copyTimer = setTimeout(() => {
+                                    keyValue.classList.remove("pk-copied");
+                                    keyValue.dataset.tooltip = rawValue;
+                                    keyValue.title = rawValue;
+                                    if (keyValue._refreshTooltip) keyValue._refreshTooltip();
+                                }, 1400);
+                            }).catch(() => {
+                                keyValue.dataset.tooltip = "Copy failed";
+                                keyValue.title = "Copy failed";
+                                keyValue._refreshTooltip();
+                            });
+                        });
+                        pkBox.appendChild(entry);
                     }
+                    content.appendChild(pkBox);
+                    wrap.appendChild(content);
+                    row.appendChild(wrap);
                 }
             } else if (data.status === "running" && i === results.length) {
                 if (data.waiting_manual) {
@@ -691,14 +950,75 @@
     }
 
     // ── Response panel ───────────────────────────────────────
+    function responseDisplayText(result) {
+        return result.response_body || result.error || (result.manual ? "Manual step" : result.skipped ? "Skipped" : "—");
+    }
+
+    function responseDisplayTime(timestamp) {
+        if (!timestamp) return "—";
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return String(timestamp);
+        return date.toLocaleString(undefined, {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+        });
+    }
+
+    function responseExportRows(results) {
+        return results.map(result => [
+            result.step_name || "",
+            result.status_code > 0 ? result.status_code : (result.skipped ? "SKIP" : "ERR"),
+            responseDisplayTime(result.executed_at),
+            result.duration_ms > 0 ? `${result.duration_ms}ms` : "—",
+            responseDisplayText(result),
+        ]);
+    }
+
+    function csvCell(value) {
+        return `"${String(value ?? "").replace(/"/g, '""')}"`;
+    }
+
+    function safeDownloadName(extension) {
+        const name = String(CHAIN_DATA.name || "api-chain-run")
+            .trim()
+            .replace(/[^a-z0-9._-]+/gi, "-")
+            .replace(/^-+|-+$/g, "") || "api-chain-run";
+        return `${name}-step-responses.${extension}`;
+    }
+
+    function downloadResponseFile(content, filename, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    function downloadResponsesCsv() {
+        const rows = [["Step", "Status", "Executed At", "Duration", "Response"], ...responseExportRows(currentResponseResults)];
+        const csv = rows.map(row => row.map(csvCell).join(",")).join("\r\n");
+        downloadResponseFile(`\uFEFF${csv}`, safeDownloadName("csv"), "text/csv;charset=utf-8");
+    }
+
     function showResponses(results) {
-        if (!results || !results.length) return;
+        currentResponseResults = Array.isArray(results) ? results : [];
+        if (!currentResponseResults.length) return;
         responseList.innerHTML = "";
         const table = document.createElement("table");
         table.className = "response-table";
         table.innerHTML = `<thead><tr>
             <th class="col-step">Step</th>
             <th class="col-status">Status</th>
+            <th class="col-executed">Executed At</th>
             <th class="col-time">Duration</th>
             <th>Response</th>
         </tr></thead>`;
@@ -715,33 +1035,23 @@
             tdStatus.className = `col-status s-${sc}`;
             tdStatus.textContent = r.status_code > 0 ? r.status_code : (r.skipped ? "SKIP" : "ERR");
 
+            const tdExecuted = document.createElement("td");
+            tdExecuted.className = "col-executed";
+            tdExecuted.textContent = responseDisplayTime(r.executed_at);
+            tdExecuted.title = tdExecuted.textContent;
+
             const tdTime = document.createElement("td");
             tdTime.className = "col-time";
             tdTime.textContent = r.duration_ms > 0 ? r.duration_ms + "ms" : "—";
 
             const tdBody = document.createElement("td");
             tdBody.className = "col-body";
-            const bodyText = r.response_body || r.error || (r.manual ? "Manual step" : r.skipped ? "Skipped" : "—");
-            const preWrap = document.createElement("div");
-            preWrap.className = "response-pre-wrap";
-            const pre = document.createElement("pre");
-            pre.textContent = bodyText;
-            const copyIcon = document.createElement("span");
-            copyIcon.className = "response-copy-icon";
-            copyIcon.textContent = "⧉";
-            copyIcon.title = "Copy response";
-            copyIcon.addEventListener("click", () => {
-                navigator.clipboard.writeText(bodyText).then(() => {
-                    copyIcon.textContent = "✓";
-                    setTimeout(() => { copyIcon.textContent = "⧉"; }, 1500);
-                });
-            });
-            preWrap.appendChild(pre);
-            preWrap.appendChild(copyIcon);
-            tdBody.appendChild(preWrap);
+            const bodyText = responseDisplayText(r);
+            tdBody.appendChild(renderBoundedValue(bodyText, { className: "response-value response-pre-wrap", label: "response" }));
 
             tr.appendChild(tdStep);
             tr.appendChild(tdStatus);
+            tr.appendChild(tdExecuted);
             tr.appendChild(tdTime);
             tr.appendChild(tdBody);
             tbody.appendChild(tr);
@@ -752,6 +1062,7 @@
     }
 
     responseClose.addEventListener("click", () => responsePanel.classList.add("hidden"));
+    responseDownloadCsv.addEventListener("click", downloadResponsesCsv);
 
     // ── Inline YAML Editor toggle ────────────────────────────
     const editToggleBtn = document.getElementById("edit-toggle-btn");
