@@ -18,6 +18,7 @@ env/
 .kiro/
 *.swp
 *.swo
+.hypothesis
 
 # OS
 .DS_Store

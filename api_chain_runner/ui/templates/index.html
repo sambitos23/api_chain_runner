@@ -38,8 +38,8 @@
                         </div>
                         {% endif %}
                     {% endif %}
-                    <a href="/flow/{{ flow.path }}" class="nav-item {{ 'nav-indent' if flow.folder else '' }}">
-                        <svg class="icon"><use href="#i-file"/></svg> {{ flow.name }}
+                    <a href="/flow/{{ flow.path }}" class="nav-item nav-file-item {{ 'nav-indent' if flow.folder else '' }}" data-file-name="{{ flow.name }}">
+                        <svg class="icon"><use href="#i-file"/></svg><span class="nav-file-name">{{ flow.name }}</span>
                     </a>
                 {% endfor %}
             </div>
@@ -132,6 +132,7 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
     <script src="{{ url_for('static', filename='create.js') }}"></script>
 </body>
 </html>

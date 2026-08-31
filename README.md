@@ -467,7 +467,7 @@ Manual steps are logged to CSV as `MANUAL — completed by user`.
 Only execute a step if a previous step's response matches a specific value. You can use a single condition or multiple conditions (all must pass):
 
 ```yaml
-# Single condition
+# Single condition (operator defaults to equals for backward compatibility)
 - name: generate-registration-link
   url: "https://api.example.com/registration-link"
   method: POST
@@ -475,6 +475,16 @@ Only execute a step if a previous step's response matches a specific value. You 
     step: check-status
     key_path: "businessProofVerification"
     expected_value: "PENDING"
+
+# List membership — runs only when the value is present in the list
+- name: next-step
+  url: "https://api.example.com/next"
+  method: POST
+  condition:
+    step: get-lead-status
+    key_path: "lead_status"
+    operator: contains
+    expected_value: "okyc"
   headers:
     Authorization: "Bearer ${auth.token}"
   payload:
@@ -497,7 +507,17 @@ Only execute a step if a previous step's response matches a specific value. You 
     leadId: "${lead.id}"
 ```
 
-If any condition is not met, the step is skipped with a message:
+Conditions support these operators:
+
+- `equals` (default) — exact value match; omitting `operator` preserves existing behavior
+- `not_equals` — value does not equal the expected value
+- `contains` / `not_contains` — expected value is (or is not) in a list, string, or mapping
+- `greater_than`, `greater_than_or_equal`, `less_than`, `less_than_or_equal` — numeric or string comparisons
+- `starts_with` / `ends_with` — string prefix/suffix checks
+- `is_null` / `is_not_null` — check whether the response value is null; expected value may be blank
+
+Multiple conditions are ANDed together. If you need to check whether `okyc` appears anywhere in `lead_status`, use `operator: contains` rather than `eval_condition`; `eval_condition` reports a result but does not control later-step execution.
+
 
 ```
 [9/12] ⏭ generate-registration-link — skipped (condition not met: businessProofVerification='COMPLETED', expected 'PENDING')

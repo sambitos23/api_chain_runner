@@ -30,8 +30,8 @@
             </div>
             <div class="nav-section">
                 <span class="nav-label">This Flow</span>
-                <a href="#" class="nav-item active">
-                    <svg class="icon"><use href="#i-flow"/></svg> {{ chain.name }}
+                <a href="#" class="nav-item nav-file-item active" data-file-name="{{ chain.name }}">
+                    <svg class="icon"><use href="#i-flow"/></svg><span class="nav-file-name">{{ chain.name }}</span>
                 </a>
                 <a href="/flow/{{ flow_path }}/docs" class="nav-item">
                     <svg class="icon"><use href="#i-file"/></svg> Documentation
@@ -92,9 +92,12 @@
                 <div id="response-panel" class="response-panel hidden">
                     <div class="response-header">
                         <h3>Step Responses</h3>
-                        <button id="response-close" class="btn-icon-only"><svg class="icon"><use href="#i-x"/></svg></button>
+                        <div class="response-actions">
+                            <button id="response-download-csv" type="button" class="btn-icon-only response-download-btn" aria-label="Download as CSV" data-tooltip="Download as CSV"><svg class="icon icon-sm"><use href="#i-download"/></svg></button>
+                            <button id="response-close" type="button" class="btn-icon-only" aria-label="Close step responses"><svg class="icon"><use href="#i-x"/></svg></button>
+                        </div>
                     </div>
-                    <div id="response-list" class="response-list"></div>
+                    <div id="response-list" class="response-list" aria-live="polite"></div>
                 </div>
             </div>
 
@@ -111,7 +114,7 @@
         <div class="step-detail-panel">
             <div class="detail-header">
                 <h3 id="detail-name"></h3>
-                <button id="detail-close" class="btn-icon-only"><svg class="icon"><use href="#i-x"/></svg></button>
+                <button id="detail-close" type="button" class="btn-icon-only" aria-label="Close step details"><svg class="icon"><use href="#i-x"/></svg></button>
             </div>
             <div id="detail-body" class="detail-body"></div>
             <div class="detail-footer">
@@ -129,6 +132,7 @@
         const FLOW_PATH = '{{ flow_path }}';
     </script>
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='sidebar.js') }}"></script>
     <script src="{{ url_for('static', filename='flow.js') }}"></script>
 </body>
 </html>

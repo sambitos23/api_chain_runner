@@ -18,6 +18,7 @@ from api_chain_runner.models import (
     PollingConfig,
     StepDefinition,
     StepResult,
+    VALID_CONDITION_OPERATORS,
     validate_steps,
 )
 from api_chain_runner.pause import PauseController
@@ -189,10 +190,17 @@ class ChainRunner:
                             raise ConfigurationError(
                                 f"Step '{entry['name']}': condition missing required field '{req_field}'."
                             )
+                    operator = str(ci.get("operator", "equals")).strip().lower()
+                    if operator not in VALID_CONDITION_OPERATORS:
+                        raise ConfigurationError(
+                            f"Step '{entry['name']}': invalid condition operator '{operator}'. "
+                            f"Must be one of {sorted(VALID_CONDITION_OPERATORS)}."
+                        )
                     conditions.append(ConditionConfig(
                         step=ci["step"],
                         key_path=ci["key_path"],
                         expected_value=str(ci["expected_value"]),
+                        operator=operator,
                     ))
                 condition = conditions
 
@@ -314,6 +322,55 @@ class ChainRunner:
         if variables and isinstance(variables, dict):
             self.store.save("vars", variables)
 
+    @staticmethod
+    def condition_matches(actual, condition: ConditionConfig) -> bool:
+        """Return whether an extracted value satisfies a configured condition."""
+        operator = condition.operator or "equals"
+        expected = condition.expected_value
+
+        if operator == "equals":
+            return str(actual) == str(expected)
+        if operator == "not_equals":
+            return str(actual) != str(expected)
+        if operator == "contains":
+            try:
+                return expected in actual
+            except TypeError:
+                return False
+        if operator == "not_contains":
+            try:
+                return expected not in actual
+            except TypeError:
+                return True
+        if operator == "is_null":
+            return actual is None
+        if operator == "is_not_null":
+            return actual is not None
+        if operator in {"starts_with", "ends_with"}:
+            if not isinstance(actual, str):
+                return False
+            return (actual.startswith if operator == "starts_with" else actual.endswith)(str(expected))
+
+        try:
+            if isinstance(actual, bool):
+                comparable_expected = str(expected).lower() == "true"
+            elif isinstance(actual, (int, float)):
+                comparable_expected = float(expected)
+            else:
+                comparable_expected = str(expected)
+            if operator == "greater_than":
+                return actual > comparable_expected
+            if operator == "greater_than_or_equal":
+                return actual >= comparable_expected
+            if operator == "less_than":
+                return actual < comparable_expected
+            if operator == "less_than_or_equal":
+                return actual <= comparable_expected
+        except (TypeError, ValueError):
+            return False
+
+        return False
+
     def run(self) -> ChainResult:
         """Execute all steps in the chain sequentially.
 
@@ -350,9 +407,9 @@ class ChainRunner:
                         if self.store.has(cond.step):
                             stored = self.store.get_raw(cond.step)
                             actual = StepExecutor._get_nested(stored, cond.key_path)
-                            if str(actual) != cond.expected_value:
+                            if not self.condition_matches(actual, cond):
                                 print(f"[{idx}/{total}] ⏭ {step.name} — skipped (condition not met: "
-                                      f"{cond.key_path}='{actual}', expected '{cond.expected_value}')")
+                                      f"{cond.key_path}='{actual}', {cond.operator} '{cond.expected_value}')")
                                 skip = True
                                 break
                         else:
