@@ -87,6 +87,10 @@
                 </div>
                 <div class="flow-canvas-wrapper">
                     <div id="flow-canvas" class="flow-canvas"></div>
+                    <button id="add-step-btn" type="button" class="add-step-btn" aria-label="Add Step">
+                        <span class="add-step-plus" aria-hidden="true">+</span>
+                        <span class="add-step-label">Add Step</span>
+                    </button>
                 </div>
 
                 <div id="response-panel" class="response-panel hidden">
@@ -114,7 +118,10 @@
         <div class="step-detail-panel">
             <div class="detail-header">
                 <h3 id="detail-name"></h3>
-                <button id="detail-close" type="button" class="btn-icon-only" aria-label="Close step details"><svg class="icon"><use href="#i-x"/></svg></button>
+                <div class="detail-header-actions">
+                    <button id="detail-delete" type="button" class="btn-icon-only detail-delete hidden" aria-label="Delete step" data-tooltip="Delete step"><svg class="icon"><use href="#i-trash"/></svg></button>
+                    <button id="detail-close" type="button" class="btn-icon-only" aria-label="Close step details"><svg class="icon"><use href="#i-x"/></svg></button>
+                </div>
             </div>
             <div id="detail-body" class="detail-body"></div>
             <div class="detail-footer">
@@ -122,6 +129,23 @@
                     <svg class="icon icon-sm"><use href="#i-save"/></svg> Save Changes
                 </button>
                 <span id="detail-save-status" class="detail-save-status"></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-confirm-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+        <div class="modal-panel delete-confirm-panel">
+            <div class="modal-header">
+                <h3 id="delete-confirm-title">Delete Step</h3>
+                <button id="delete-confirm-close" type="button" class="btn-icon-only" aria-label="Close delete confirmation"><svg class="icon"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong id="delete-confirm-step-name"></strong>?</p>
+                <p class="delete-confirm-warning">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button id="delete-confirm-cancel" type="button" class="btn btn-ghost btn-sm">Cancel</button>
+                <button id="delete-confirm-ok" type="button" class="btn btn-sm delete-confirm-btn">Delete Step</button>
             </div>
         </div>
     </div>

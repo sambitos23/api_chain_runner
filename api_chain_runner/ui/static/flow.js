@@ -9,16 +9,24 @@
     const detailName = document.getElementById("detail-name");
     const detailBody = document.getElementById("detail-body");
     const detailClose = document.getElementById("detail-close");
+    const detailDelete = document.getElementById("detail-delete");
+    const deleteConfirmModal = document.getElementById("delete-confirm-modal");
+    const deleteConfirmStepName = document.getElementById("delete-confirm-step-name");
+    const deleteConfirmClose = document.getElementById("delete-confirm-close");
+    const deleteConfirmCancel = document.getElementById("delete-confirm-cancel");
+    const deleteConfirmOk = document.getElementById("delete-confirm-ok");
     const detailSave = document.getElementById("detail-save");
     const detailSaveStatus = document.getElementById("detail-save-status");
     const responsePanel = document.getElementById("response-panel");
     const responseList = document.getElementById("response-list");
     const responseClose = document.getElementById("response-close");
     const responseDownloadCsv = document.getElementById("response-download-csv");
+    const addStepBtn = document.getElementById("add-step-btn");
 
     const steps = CHAIN_DATA.steps;
     const stepBoxes = [];
     let currentStepIndex = -1;
+    let isCreatingStep = false;
     let currentResponseResults = [];
 
     // ── Render VERTICAL flow ─────────────────────────────────
@@ -82,9 +90,12 @@
     }
 
     // ── Detail drawer with editable fields ───────────────────
-    function showDetail(step, index) {
+    function showDetail(step, index, isNew = false) {
         currentStepIndex = index;
-        detailName.textContent = step.name;
+        isCreatingStep = isNew;
+        detailName.textContent = isNew ? "Add Step" : step.name;
+        detailDelete.classList.toggle("hidden", isNew);
+        detailSave.textContent = isNew ? "Save Step" : "Save Changes";
         detailSaveStatus.textContent = "";
         detailSaveStatus.className = "detail-save-status";
 
@@ -95,6 +106,7 @@
         if (isManual) {
             // ── Manual step UI ──
             html += `<div class="detail-row"><div class="detail-label">Type</div><div class="detail-value">Manual Step</div></div>`;
+            html += inputRow("name", "Step Name", step.name || "");
             html += editableRow("instruction", "Instruction", step.instruction || "");
             html += buildListField("print_ref", "Print References", step.print_ref || [], "e.g. create-lead.leadId");
             html += buildToggleSection("condition", "Conditions", (step.condition || []).length ? step.condition : null, buildConditionFields);
@@ -102,6 +114,7 @@
             html += dropdownRow("continue_on_error", "Continue on Error", step.continue_on_error);
         } else {
             // ── API step UI ──
+            html += inputRow("name", "Step Name", step.name || "");
             const methods = ["GET","POST","PUT","DELETE","PATCH","HEAD","OPTIONS"];
             html += `<div class="detail-row"><div class="detail-label">Method</div>
                 <select class="detail-select" data-field="method">${methods.map(m => `<option${m===curMethod?" selected":""}>${m}</option>`).join("")}</select></div>`;
@@ -483,7 +496,7 @@
 
     // ── Save step changes from drawer ────────────────────────
     detailSave.addEventListener("click", async () => {
-        if (currentStepIndex < 0) return;
+        if (!isCreatingStep && currentStepIndex < 0) return;
         const editables = detailBody.querySelectorAll(".detail-editable, .detail-editable-input, .detail-select");
         const updates = {};
 
@@ -494,7 +507,7 @@
 
             if (!raw && !["method", "url", "delay", "continue_on_error", "instruction"].includes(field)) continue;
 
-            if (["url", "method", "instruction", "eval_condition", "success_message", "failure_message"].includes(field)) {
+            if (["name", "url", "method", "instruction", "eval_condition", "success_message", "failure_message"].includes(field)) {
                 updates[field] = raw;
             } else if (field === "delay") {
                 updates[field] = parseInt(raw) || 0;
@@ -510,6 +523,14 @@
                 }
             }
         }
+
+        if (!updates.name || !updates.name.trim()) {
+            detailSaveStatus.textContent = "Step name is required";
+            detailSaveStatus.className = "detail-save-status error";
+            detailBody.querySelector('[data-field="name"]')?.focus();
+            return;
+        }
+        updates.name = updates.name.trim();
 
         // Collect list fields (print_keys, print_ref)
         detailBody.querySelectorAll(".list-field").forEach(container => {
@@ -604,14 +625,18 @@
         detailSaveStatus.className = "detail-save-status";
 
         try {
-            const res = await fetch(`/api/flow/${FLOW_PATH}/step/${currentStepIndex}`, {
+            const endpoint = isCreatingStep
+                ? `/api/flow/${FLOW_PATH}/step`
+                : `/api/flow/${FLOW_PATH}/step/${currentStepIndex}`;
+            const body = isCreatingStep ? { step: updates } : { updates };
+            const res = await fetch(endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ updates }),
+                body: JSON.stringify(body),
             });
             const data = await res.json();
             if (data.success) {
-                detailSaveStatus.textContent = "✓ Saved";
+                detailSaveStatus.textContent = isCreatingStep ? "✓ Step added" : "✓ Saved";
                 detailSaveStatus.className = "detail-save-status success";
                 setTimeout(() => location.reload(), 1200);
             } else {
@@ -622,6 +647,61 @@
             detailSaveStatus.textContent = "✗ " + err.message;
             detailSaveStatus.className = "detail-save-status error";
         }
+    });
+
+    detailDelete.addEventListener("click", () => {
+        if (isCreatingStep || currentStepIndex < 0) return;
+        deleteConfirmStepName.textContent = steps[currentStepIndex].name;
+        deleteConfirmModal.classList.remove("hidden");
+        deleteConfirmOk.focus();
+    });
+
+    function closeDeleteConfirmation() {
+        deleteConfirmModal.classList.add("hidden");
+    }
+
+    deleteConfirmClose.addEventListener("click", closeDeleteConfirmation);
+    deleteConfirmCancel.addEventListener("click", closeDeleteConfirmation);
+    deleteConfirmModal.addEventListener("click", (event) => {
+        if (event.target === deleteConfirmModal) closeDeleteConfirmation();
+    });
+
+    deleteConfirmOk.addEventListener("click", async () => {
+        if (isCreatingStep || currentStepIndex < 0) return;
+        closeDeleteConfirmation();
+        detailDelete.disabled = true;
+        deleteConfirmOk.disabled = true;
+        detailSaveStatus.textContent = "Deleting...";
+        detailSaveStatus.className = "detail-save-status";
+        try {
+            const res = await fetch(`/api/flow/${FLOW_PATH}/step/${currentStepIndex}`, { method: "DELETE" });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || "Failed to delete step");
+            detailSaveStatus.textContent = "✓ Deleted";
+            detailSaveStatus.className = "detail-save-status success";
+            setTimeout(() => location.reload(), 700);
+        } catch (err) {
+            detailDelete.disabled = false;
+            deleteConfirmOk.disabled = false;
+            detailSaveStatus.textContent = "✗ " + err.message;
+            detailSaveStatus.className = "detail-save-status error";
+        }
+    });
+
+    addStepBtn.addEventListener("click", () => {
+        showDetail({
+            name: "",
+            method: "GET",
+            url: "",
+            manual: false,
+            continue_on_error: true,
+            delay: 0,
+            headers: {},
+            print_keys: [],
+            condition: [],
+            retry: false,
+        }, -1, true);
+        detailBody.querySelector('[data-field="name"]')?.focus();
     });
 
     // ── Run chain ────────────────────────────────────────────
