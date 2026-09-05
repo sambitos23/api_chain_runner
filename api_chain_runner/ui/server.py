@@ -124,7 +124,7 @@ def _parse_chain(filepath: str) -> dict:
             "url": step.get("url", ""),
             "continue_on_error": step.get("continue_on_error", True),
             "delay": step.get("delay", 0),
-            "has_polling": "polling" in step,
+            "has_polling": isinstance(step.get("polling"), dict),
             "has_payload": "payload" in step,
             "has_files": "files" in step,
             "has_unique_fields": "unique_fields" in step,
@@ -144,7 +144,7 @@ def _parse_chain(filepath: str) -> dict:
             "failure_message": step.get("failure_message", ""),
             "retry": step.get("retry"),
         }
-        if "polling" in step:
+        if isinstance(step.get("polling"), dict):
             p = step["polling"]
             step_info["polling"] = {
                 "key_path": p.get("key_path", ""),
@@ -165,6 +165,25 @@ def _read_raw_yaml(filepath: str) -> str:
     """Read raw YAML content for editing."""
     with open(filepath, "r", encoding="utf-8") as f:
         return f.read()
+
+
+def _validate_step_names(raw: dict) -> None:
+    """Validate only the required and unique names in a candidate chain."""
+    chain = raw.get("chain") if isinstance(raw, dict) else None
+    if not isinstance(chain, list) or not chain:
+        raise ValueError("Configuration must contain a non-empty 'chain' list.")
+
+    seen = set()
+    for index, step in enumerate(chain):
+        if not isinstance(step, dict):
+            raise ValueError(f"Step at index {index} must be a mapping.")
+        name = step.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"Step at index {index} must have a non-empty name.")
+        normalized = name.strip()
+        if normalized in seen:
+            raise ValueError(f"Duplicate step name '{normalized}'. Step names must be unique.")
+        seen.add(normalized)
 
 
 def _format_yaml_for_readability(yaml_str: str) -> str:
@@ -504,7 +523,7 @@ def api_step_update(flow_path, step_index):
                 return jsonify({"error": str(exc)}), 400
 
         # Apply updates to allowed fields
-        allowed = {"payload", "headers", "url", "unique_fields", "delay", "continue_on_error", "method", "files", "print_keys", "polling", "eval_keys", "eval_condition", "success_message", "failure_message", "manual", "instruction", "print_ref", "retry", "condition"}
+        allowed = {"name", "payload", "headers", "url", "unique_fields", "delay", "continue_on_error", "method", "files", "print_keys", "polling", "eval_keys", "eval_condition", "success_message", "failure_message", "manual", "instruction", "print_ref", "retry", "condition"}
         for key, value in updates.items():
             if key not in allowed:
                 continue
@@ -518,6 +537,11 @@ def api_step_update(flow_path, step_index):
                 step.pop(key, None)
             else:
                 step[key] = value
+
+        try:
+            _validate_step_names(raw)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         # Write back preserving original formatting as much as possible
         dumped = yaml.dump(
@@ -534,6 +558,76 @@ def api_step_update(flow_path, step_index):
         return jsonify({"success": True})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/flow/<path:flow_path>/step/<int:step_index>", methods=["DELETE"])
+def api_step_delete(flow_path, step_index):
+    """Delete one step after checking the remaining step names."""
+    abs_path = os.path.join(_flow_dir, flow_path)
+    if not os.path.isfile(abs_path):
+        return jsonify({"error": "not found"}), 404
+
+    try:
+        with open(abs_path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+        chain = raw.get("chain", []) if isinstance(raw, dict) else []
+        if step_index < 0 or step_index >= len(chain):
+            return jsonify({"error": "step index out of range"}), 400
+
+        candidate = dict(raw)
+        candidate["chain"] = list(chain)
+        candidate["chain"].pop(step_index)
+        _validate_step_names(candidate)
+
+        dumped = yaml.dump(
+            candidate,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+            default_style='"',
+        )
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write(_format_yaml_for_readability(dumped))
+        return jsonify({"success": True})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/flow/<path:flow_path>/step", methods=["POST"])
+def api_step_add(flow_path):
+    """Append one validated step to an existing flow."""
+    abs_path = os.path.join(_flow_dir, flow_path)
+    if not os.path.isfile(abs_path):
+        return jsonify({"error": "not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    new_step = data.get("step", data.get("updates"))
+    if not isinstance(new_step, dict):
+        return jsonify({"error": "step must be a mapping"}), 400
+
+    try:
+        with open(abs_path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+        if not isinstance(raw, dict) or not isinstance(raw.get("chain"), list):
+            return jsonify({"error": "Configuration must contain a top-level 'chain' list."}), 400
+        candidate = dict(raw)
+        candidate["chain"] = list(raw["chain"]) + [dict(new_step)]
+        _validate_step_names(candidate)
+
+        dumped = yaml.dump(
+            candidate,
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
+            default_style='"',
+        )
+        with open(abs_path, "w", encoding="utf-8") as f:
+            f.write(_format_yaml_for_readability(dumped))
+        return jsonify({"success": True})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @app.route("/api/flow/create", methods=["POST"])
